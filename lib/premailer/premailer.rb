@@ -186,6 +186,7 @@ class Premailer
   # @option options [String] :input_encoding Manually specify the source documents encoding. This is a good idea. Default is ASCII-8BIT.
   # @option options [Boolean] :replace_html_entities Convert HTML entities to actual characters. Default is false.
   # @option options [Symbol] :adapter Which HTML parser to use, either <tt>:nokogiri</tt> or <tt>:hpricot</tt>.  Default is <tt>:hpricot</tt>.
+  # @option options [String] :process_only_tags_with_attribute When searching for styles in html, will ignore styles without specified attribute present. Defaults to nil.
   def initialize(html, options = {})
     @options = {:warn_level => Warnings::SAFE,
                 :line_length => 65,
@@ -209,6 +210,7 @@ class Premailer
                 :input_encoding => 'ASCII-8BIT',
                 :replace_html_entities => false,
                 :adapter => Adapter.use,
+                :process_only_tags_with_attribute => nil
                 }.merge(options)
 
     @html_file = html
@@ -297,6 +299,10 @@ protected
       tags = @doc.search("link[@rel='stylesheet'], style:not([@data-premailer='ignore'])")
     end
     if tags
+      tags = tags.select do |tag|
+        tag.attributes.has_key?(@options[:process_only_tags_with_attribute].to_s) if @options[:process_only_tags_with_attribute]
+      end
+
       tags.each do |tag|
         if tag.to_s.strip =~ /^\<link/i && tag.attributes['href'] && media_type_ok?(tag.attributes['media']) && @options[:include_link_tags]
           # A user might want to <link /> to a local css file that is also mirrored on the site
@@ -322,8 +328,8 @@ protected
         elsif tag.to_s.strip =~ /^\<style/i && @options[:include_style_tags]
           @css_parser.add_block!(tag.inner_html, :base_uri => @base_url, :base_dir => @base_dir, :only_media_types => [:screen, :handheld])
         end
+        tag.remove unless @options[:preserve_styles]
       end
-      tags.remove unless @options[:preserve_styles]
     end
   end
 
